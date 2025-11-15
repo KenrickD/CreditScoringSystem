@@ -1,15 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
 using CreditScoringSystem.Data;
 using CreditScoringSystem.Models;
 
 namespace CreditScoringSystem.Pages
 {
-    public class CreateModel : PageModel
+    public class EditModel : PageModel
     {
         private readonly ApplicationDbContext _context;
 
-        public CreateModel(ApplicationDbContext context)
+        public EditModel(ApplicationDbContext context)
         {
             _context = context;
         }
@@ -17,8 +18,22 @@ namespace CreditScoringSystem.Pages
         [BindProperty]
         public CreditApplication Application { get; set; } = new();
 
-        public void OnGet()
+        public async Task<IActionResult> OnGetAsync(int? id)
         {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var application = await _context.CreditApplications.FindAsync(id);
+
+            if (application == null)
+            {
+                return NotFound();
+            }
+
+            Application = application;
+            return Page();
         }
 
         public async Task<IActionResult> OnPostAsync()
@@ -28,7 +43,7 @@ namespace CreditScoringSystem.Pages
                 return Page();
             }
 
-            // Calculate all tab scores
+            // Recalculate all tab scores
             Application.Tab1Score = CalculateTab1Score();
             Application.Tab2Score = CalculateTab2Score();
             Application.Tab3Score = CalculateTab3Score();
@@ -36,29 +51,46 @@ namespace CreditScoringSystem.Pages
             Application.Tab5Score = CalculateTab5Score();
             Application.Tab6Score = CalculateTab6Score();
 
-            // Calculate total score
+            // Recalculate total score
             Application.TotalScore = Application.Tab1Score + Application.Tab2Score +
                                     Application.Tab3Score + Application.Tab4Score +
                                     Application.Tab5Score + Application.Tab6Score;
 
-            // Determine Risk Level
+            // Re-determine Risk Level
             Application.RiskLevel = DetermineRiskLevel(Application.TotalScore);
 
-            Application.CreatedAt = DateTime.Now;
+            _context.Attach(Application).State = EntityState.Modified;
 
-            _context.CreditApplications.Add(Application);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!ApplicationExists(Application.Id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
 
-            TempData["Message"] = "Application created successfully!";
+            TempData["Message"] = "Application updated successfully! Risk has been recalculated.";
             return RedirectToPage("/Index");
+        }
+
+        private bool ApplicationExists(int id)
+        {
+            return _context.CreditApplications.Any(e => e.Id == id);
         }
 
         private double CalculateTab1Score()
         {
             double tab1Score = 0;
-            const double tab1Weight = 0.05; // 5%
+            const double tab1Weight = 0.05;
 
-            // Parameter 1: Umur Pemohon (Weight: 30%)
             double param1Score = Application.AgeRange switch
             {
                 "56-65" => 25,
@@ -69,7 +101,6 @@ namespace CreditScoringSystem.Pages
             };
             tab1Score += param1Score * 0.30;
 
-            // Parameter 2: Umur Pemohon + Tenor (Weight: 10%)
             double param2Score = Application.AgePlusTenor switch
             {
                 "Above" => 25,
@@ -78,7 +109,6 @@ namespace CreditScoringSystem.Pages
             };
             tab1Score += param2Score * 0.10;
 
-            // Parameter 3: Status Perkawinan (Weight: 40%)
             double param3Score = Application.MaritalStatus switch
             {
                 "SingleMoreThan2" => 25,
@@ -90,7 +120,6 @@ namespace CreditScoringSystem.Pages
             };
             tab1Score += param3Score * 0.40;
 
-            // Parameter 4: Pendidikan (Weight: 20%)
             double param4Score = Application.Education switch
             {
                 "HighSchool" => 25,
@@ -101,16 +130,14 @@ namespace CreditScoringSystem.Pages
             };
             tab1Score += param4Score * 0.20;
 
-            // Multiply by tab weight
             return tab1Score * tab1Weight;
         }
 
         private double CalculateTab2Score()
         {
             double tab2Score = 0;
-            const double tab2Weight = 0.05; // 5%
+            const double tab2Weight = 0.05;
 
-            // Parameter 1: Alamat Tempat Tinggal (Weight: 40%)
             double param1Score = Application.ResidenceAddressMatch switch
             {
                 "NotMatch" => 25,
@@ -119,7 +146,6 @@ namespace CreditScoringSystem.Pages
             };
             tab2Score += param1Score * 0.40;
 
-            // Parameter 2: Kepemilikan tempat tinggal (Weight: 30%)
             double param2Score = Application.ResidenceOwnership switch
             {
                 "Others" => 25,
@@ -130,7 +156,6 @@ namespace CreditScoringSystem.Pages
             };
             tab2Score += param2Score * 0.30;
 
-            // Parameter 3: Lama Menempati (Weight: 30%)
             double param3Score = Application.ResidenceDuration switch
             {
                 "LessThan2" => 25,
@@ -147,9 +172,8 @@ namespace CreditScoringSystem.Pages
         private double CalculateTab3Score()
         {
             double tab3Score = 0;
-            const double tab3Weight = 0.20; // 20%
+            const double tab3Weight = 0.20;
 
-            // Parameter 1: Kategori Perusahaan (Weight: 20%)
             double param1Score = Application.CompanyCategory switch
             {
                 "Government" => 100,
@@ -163,7 +187,6 @@ namespace CreditScoringSystem.Pages
             };
             tab3Score += param1Score * 0.20;
 
-            // Parameter 2: Jabatan (Weight: 20%)
             double param2Score = Application.JobPosition switch
             {
                 "Staff" => 25,
@@ -173,7 +196,6 @@ namespace CreditScoringSystem.Pages
             };
             tab3Score += param2Score * 0.20;
 
-            // Parameter 3: Lama Bekerja (Weight: 20%)
             double param3Score = Application.WorkDuration switch
             {
                 "LessThan2" => 0,
@@ -184,7 +206,6 @@ namespace CreditScoringSystem.Pages
             };
             tab3Score += param3Score * 0.20;
 
-            // Parameter 4: Pendapatan THP (Weight: 40%)
             double param4Score = Application.TakeHomePay switch
             {
                 "LessThan10" => 25,
@@ -201,9 +222,8 @@ namespace CreditScoringSystem.Pages
         private double CalculateTab4Score()
         {
             double tab4Score = 0;
-            const double tab4Weight = 0.15; // 15%
+            const double tab4Weight = 0.15;
 
-            // Parameter 1: Rekening Bank (Weight: 10%)
             double param1Score = Application.BankAccount switch
             {
                 "None" => 25,
@@ -214,7 +234,6 @@ namespace CreditScoringSystem.Pages
             };
             tab4Score += param1Score * 0.10;
 
-            // Parameter 2: Rata-Rata Saldo Per bulannya (Weight: 15%)
             double param2Score = Application.AverageBalance switch
             {
                 "LessThan10" => 25,
@@ -225,7 +244,6 @@ namespace CreditScoringSystem.Pages
             };
             tab4Score += param2Score * 0.15;
 
-            // Parameter 3: Track record pembayaran angsuran (Weight: 15%)
             double param3Score = Application.PaymentTrackRecord switch
             {
                 "NewBorrower" => 25,
@@ -235,7 +253,6 @@ namespace CreditScoringSystem.Pages
             };
             tab4Score += param3Score * 0.15;
 
-            // Parameter 4: Track Data SLIK (Weight: 40%)
             double param4Score = Application.SlikData switch
             {
                 "Col3to5" => 0,
@@ -246,7 +263,6 @@ namespace CreditScoringSystem.Pages
             };
             tab4Score += param4Score * 0.40;
 
-            // Parameter 5: Kepemilikan Kartu Kredit (Weight: 20%)
             double param5Score = Application.CreditCardOwnership switch
             {
                 "None" => 25,
@@ -263,9 +279,8 @@ namespace CreditScoringSystem.Pages
         private double CalculateTab5Score()
         {
             double tab5Score = 0;
-            const double tab5Weight = 0.30; // 30%
+            const double tab5Weight = 0.30;
 
-            // Parameter 1: Tenor (Weight: 25%)
             double param1Score = Application.Tenor switch
             {
                 "MoreThan15" => 25,
@@ -276,7 +291,6 @@ namespace CreditScoringSystem.Pages
             };
             tab5Score += param1Score * 0.25;
 
-            // Parameter 2: Debt Service Ratio (Weight: 75%)
             double param2Score = Application.DebtServiceRatio switch
             {
                 "MoreThan50" => 0,
@@ -293,9 +307,8 @@ namespace CreditScoringSystem.Pages
         private double CalculateTab6Score()
         {
             double tab6Score = 0;
-            const double tab6Weight = 0.25; // 25%
+            const double tab6Weight = 0.25;
 
-            // Parameter 1: Hasil Appraisal (Weight: 10%)
             double param1Score = Application.AppraisalResult switch
             {
                 "NotRecommended" => 0,
@@ -304,7 +317,6 @@ namespace CreditScoringSystem.Pages
             };
             tab6Score += param1Score * 0.10;
 
-            // Parameter 2: Luas Bangunan (Weight: 20%)
             double param2Score = Application.BuildingArea switch
             {
                 "MoreThan200" => 25,
@@ -315,7 +327,6 @@ namespace CreditScoringSystem.Pages
             };
             tab6Score += param2Score * 0.20;
 
-            // Parameter 3: Tujuan dari pembiayaan (Weight: 10%)
             double param3Score = Application.FinancingPurpose switch
             {
                 "Others" => 25,
@@ -326,7 +337,6 @@ namespace CreditScoringSystem.Pages
             };
             tab6Score += param3Score * 0.10;
 
-            // Parameter 4: LTV (Weight: 60%)
             double param4Score = Application.LTV switch
             {
                 "MoreThan100" => 0,

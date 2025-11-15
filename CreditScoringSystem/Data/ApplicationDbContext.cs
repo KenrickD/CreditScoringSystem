@@ -1,6 +1,5 @@
-﻿using CreditScoringSystem.Models;
-using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
+﻿using Microsoft.EntityFrameworkCore;
+using CreditScoringSystem.Models;
 
 namespace CreditScoringSystem.Data
 {
