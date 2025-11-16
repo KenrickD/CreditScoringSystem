@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using CreditScoringSystem.Data;
+using CreditScoringSystem.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +10,9 @@ builder.Services.AddRazorPages();
 // Add DbContext with SQLite
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=creditscore.db"));
+
+// Register CreditScoringService
+builder.Services.AddScoped<CreditScoringService>();
 
 var app = builder.Build();
 
