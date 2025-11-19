@@ -48,7 +48,7 @@ namespace CreditScoringSystem.Pages
 
             _scoringService.CalculateAllScores(Application);
 
-            _context.Attach(Application).State = EntityState.Modified;
+            _context.CreditApplications.Update(Application);
 
             try
             {
